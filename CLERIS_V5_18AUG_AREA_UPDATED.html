@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cleris Daily Sales Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f3f8f6;--card:#fff;--text:#16352f;--muted:#6d817b;--green:#087d5c;--green2:#16a477;--line:#e4eeea;--soft:#e9f6f0;--danger:#b42318}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--text)}
+header{background:#fff;padding:20px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;box-shadow:0 3px 18px rgba(16,91,70,.06)}
+.head{max-width:1180px;margin:auto;text-align:center}.logo{font-size:32px;font-weight:900;color:var(--green);letter-spacing:-1.5px}.sub{font-size:12px;color:var(--muted);margin-top:3px}
+.nav{display:flex;gap:8px;overflow:auto;max-width:1180px;margin:14px auto 0;padding-bottom:2px}.nav button{border:0;border-radius:11px;padding:11px 16px;background:#eef6f2;color:var(--green);font-weight:800;white-space:nowrap}.nav button.active{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff}
+main{max-width:1180px;margin:auto;padding:18px}.page{display:none}.page.active{display:block}.card{background:var(--card);border-radius:17px;padding:18px;margin-bottom:15px;border:1px solid var(--line);box-shadow:0 6px 22px rgba(16,91,70,.06)}
+h1{font-size:25px;margin:0 0 5px}.muted{color:var(--muted)}h2{font-size:17px;margin:0 0 13px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat{background:#f7faf8;border:1px solid var(--line);border-radius:13px;padding:15px}.stat span{font-size:11px;color:var(--muted)}.stat b{display:block;font-size:25px;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}label{display:block;font-size:11px;color:var(--muted);font-weight:800;margin-bottom:6px}
+input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:#f7faf8;color:var(--text);font-size:14px}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}.mini-btn{border:0;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer}.edit-btn{background:#e9f6f0;color:#087d5c}.delete-btn{background:#fff1f0;color:#b42318}.table-actions{display:flex;gap:6px;white-space:nowrap}.btn{border:0;border-radius:10px;padding:11px 15px;font-weight:800;cursor:pointer}.primary{background:linear-gradient(135deg,var(--green),var(--green2));color:#fff}.secondary{background:var(--soft);color:var(--green)}
+.status{padding:10px 12px;border-radius:10px;background:var(--soft);color:var(--green);font-size:13px;margin:12px 0}.status.err{background:#fff1f0;color:var(--danger)}
+.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:950px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:12px}th{font-size:10px;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.badge{display:inline-block;background:var(--soft);color:var(--green);padding:5px 9px;border-radius:20px;font-size:11px;font-weight:800}
+.entry-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.entry-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.input-list{display:grid;grid-template-columns:1fr 90px;gap:7px;align-items:center;margin:7px 0}.input-list label{margin:0;font-size:12px}.input-list input{padding:9px}
+.report{white-space:pre-wrap;background:#f7faf8;border-left:3px solid var(--green);padding:14px;border-radius:10px;font-size:13px;line-height:1.45}
+.empty{text-align:center;padding:35px;color:var(--muted)}
+@media(max-width:760px){.stats,.grid{grid-template-columns:repeat(2,1fr)}.entry-grid{grid-template-columns:1fr}.entry-row{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header><div class="head"><div class="logo">Cleris</div><div class="sub">Daily Sales Dashboard • Cloud Connected</div></div>
+<nav class="nav">
+<button class="active" onclick="showPage('dashboard',this)">Dashboard</button>
+<button onclick="showPage('entry',this)">Daily Entry</button>
+<button onclick="showPage('history',this)">History</button>
+<button onclick="showPage('reports',this)">Reports</button>
+</nav></header>
+
+<main>
+<section id="dashboard" class="page active">
+<div class="card"><h1>Cleris Sales Dashboard</h1><span id="cloudStatus" class="badge">Checking Supabase…</span></div>
+<div class="stats">
+<div class="stat"><span>TOTAL SALES</span><b id="dashTotal">0</b></div>
+<div class="stat"><span>WORKING DAYS</span><b id="dashDays">0</b></div>
+<div class="stat"><span>WORKING-DAY AVG</span><b id="dashAvg">0</b></div>
+<div class="stat"><span>BEST DAY</span><b id="dashBest">—</b></div>
+</div>
+<div class="card" style="margin-top:15px"><h2>Sales Performance</h2>
+<div style="height:280px"><canvas id="salesChart"></canvas></div></div>
+<div class="card"><h2>Product Performance</h2>
+<div style="height:280px"><canvas id="productChart"></canvas></div></div>
+<div class="card"><h2>Day Wise Performance</h2><div id="dashTable"></div></div>
+</section>
+
+<section id="entry" class="page">
+<div class="entry-grid">
+<div class="card">
+<h2>Daily Entry</h2><div id="editMode" class="status" style="display:none"></div>
+<div class="entry-row"><div><label>Date</label><input id="date" type="date" value="2026-08-19"></div><div><label>Day</label><input id="day" readonly></div></div>
+<div class="entry-row" style="margin-top:12px">
+<div><label>Total Pairs</label><input id="total" type="number" step="0.5" min="0"></div>
+<div><label>Daily Average</label><input id="entryAvg" type="text" readonly></div>
+</div>
+<div id="entryInputs"></div>
+<div id="entryMsg"></div>
+<div class="actions"><button id="saveBtn" class="btn primary" onclick="saveNewDay()">✓ Generate & Save Daily Report</button><button class="btn secondary" onclick="clearEntry()">Clear</button></div>
+</div>
+<div class="card"><h2>WhatsApp Text Generator</h2><div id="report" class="report">Select a saved date or enter a new date.</div><div class="actions"><button class="btn primary" onclick="copyReport()">Copy Text</button><button class="btn secondary" onclick="copyWhatsApp()">Copy & Open WhatsApp</button></div></div>
+</div>
+</section>
+
+<section id="history" class="page">
+<div class="card"><h1>History</h1><div class="muted">01–18 August historical data is built into this file. New dates sync to Supabase. Cloud dates can be edited or deleted.</div>
+<div class="actions"><button class="btn secondary" onclick="loadCloud()">↻ Refresh Cloud</button><button class="btn primary" onclick="downloadExcel()">↓ Download Excel</button></div></div>
+<div class="card"><div id="historyTable"></div></div>
+</section>
+
+<section id="reports" class="page">
+<div class="card"><h2>Weekly Report</h2><div id="weekly" class="report"></div><div class="actions"><button class="btn primary" onclick="copyById('weekly')">Copy Weekly</button><button class="btn secondary" onclick="copyById('weekly');setTimeout(()=>window.open('https://wa.me/','_blank'),250)">Copy & WhatsApp</button></div></div>
+<div class="card"><h2>Monthly Report</h2><div id="monthly" class="report"></div><div class="actions"><button class="btn primary" onclick="copyById('monthly')">Copy Monthly</button><button class="btn secondary" onclick="copyById('monthly');setTimeout(()=>window.open('https://wa.me/','_blank'),250)">Copy & WhatsApp</button></div></div>
+</section>
+</main>
+
+<script>
+const SUPABASE_URL="https://zrythtxvcnrbjiamnhmn.supabase.co";
+const SUPABASE_KEY="sb_publishable_KqyST4JRMROm5CbI9943bw_CKUATjqF";
+const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const HISTORICAL_MAX="2026-08-18";
+const seedData={"2026-08-01":{"total":129,"products":{"Cleris":51,"Cleris UV":4,"C Blue":0,"Night drive C Blue":2,"Tissot":64},"area":{"Gujarat":65,"Mumbai":41,"Umar Area":19,"Ahmedabad":0},"city":{"Surat":32,"Rajkot":15,"Valsad":4,"Navsari":0,"Bardoli":0,"Bharuch":0,"Ankleshwar":3,"Vadodara":6}},"2026-08-02":{"total":2,"products":{"Cleris":0,"Cleris UV":1,"C Blue":0,"Night drive C Blue":0,"Tissot":1},"area":{},"city":{}},"2026-08-03":{"total":276,"products":{"Cleris":99,"Cleris UV":7,"C Blue":3,"Night drive C Blue":8,"Tissot":138},"area":{"Gujarat":163,"Mumbai":75,"Umar Area":51,"Ahmedabad":0},"city":{"Surat":82,"Rajkot":20,"Valsad":27,"Navsari":4,"Bardoli":6,"Bharuch":4,"Ankleshwar":3,"Vadodara":9}},"2026-08-04":{"total":200,"products":{"Cleris":74,"Cleris UV":2,"C Blue":2,"Night drive C Blue":4,"Tissot":110},"area":{"Gujarat":127,"Mumbai":40,"Umar Area":48,"Ahmedabad":0.5},"city":{"Surat":56,"Rajkot":17,"Valsad":19,"Navsari":4,"Bardoli":10,"Bharuch":4,"Ankleshwar":2,"Vadodara":9}},"2026-08-05":{"total":218,"products":{"Cleris":71,"Cleris UV":3,"C Blue":2,"Night drive C Blue":6,"Tissot":124},"area":{"Gujarat":142,"Mumbai":38,"Umar Area":36,"Ahmedabad":1},"city":{"Surat":73,"Rajkot":19,"Valsad":27,"Navsari":5,"Bardoli":5,"Bharuch":4,"Ankleshwar":0,"Vadodara":3}},"2026-08-06":{"total":218,"products":{"Cleris":76,"Cleris UV":5,"C Blue":2,"Night drive C Blue":11,"Tissot":115},"area":{"Gujarat":138,"Mumbai":45,"Umar Area":43,"Sakib Area":121,"Ahmedabad":0},"city":{"Surat":60,"Rajkot":26,"Valsad":25,"Navsari":3,"Bardoli":3,"Bharuch":1,"Ankleshwar":3,"Vadodara":8}},"2026-08-07":{"total":178,"products":{"Cleris":62,"Cleris UV":1,"C Blue":0,"Night drive C Blue":9,"Tissot":92},"area":{"Gujarat":107,"Mumbai":45.5,"Umar Area":43,"Sakib Area":29,"Ahmedabad":0},"city":{"Surat":61.5,"Rajkot":10.5,"Valsad":10.5,"Navsari":1,"Bardoli":3,"Bharuch":0,"Ankleshwar":3,"Vadodara":4}},"2026-08-08":{"total":162,"products":{"Cleris":53,"Cleris UV":0,"C Blue":2,"Night drive C Blue":5,"Tissot":95},"area":{"Gujarat":112.5,"Mumbai":25,"Umar Area":39,"Sakib Area":28.5,"Ahmedabad":0},"city":{"Surat":63,"Rajkot":7.5,"Valsad":29,"Navsari":1,"Bardoli":4.5,"Bharuch":0.5,"Ankleshwar":2,"Vadodara":2}},"2026-08-09":{"total":5,"products":{"Cleris":1,"Cleris UV":4,"C Blue":0,"Night drive C Blue":0,"Tissot":0},"area":{},"city":{}},"2026-08-10":{"total":342,"products":{"Cleris":118,"Cleris UV":4,"C Blue":5,"Night drive C Blue":9,"Tissot":165},"area":{"Gujarat":220,"Mumbai":81,"Umar Area":75,"Sakib Area":108,"Ahmedabad":1},"city":{"Surat":132,"Rajkot":28,"Valsad":25,"Navsari":2,"Bardoli":3,"Bharuch":2,"Ankleshwar":4,"Vadodara":9}},"2026-08-11":{"total":188,"products":{"Cleris":58,"Cleris UV":12,"C Blue":2,"Night drive C Blue":1,"Tissot":102},"area":{"Gujarat":137,"Mumbai":35,"Umar Area":56,"Sakib Area":55,"Ahmedabad":2},"city":{"Surat":83,"Rajkot":17,"Valsad":13,"Navsari":3,"Bardoli":0,"Bharuch":2,"Ankleshwar":3,"Vadodara":6}},"2026-08-12":{"total":154,"products":{"Cleris":62,"Cleris UV":5,"C Blue":1,"Night drive C Blue":6,"Tissot":69},"area":{"Gujarat":84,"Mumbai":44,"Umar Area":29,"Sakib Area":39,"Ahmedabad":0.5},"city":{"Surat":47,"Rajkot":11,"Valsad":12,"Navsari":1,"Bardoli":1,"Bharuch":0,"Ankleshwar":0,"Vadodara":5}},"2026-08-13":{"total":174,"products":{"Cleris":67,"Cleris UV":7,"C Blue":2,"Night drive C Blue":4,"Tissot":85},"area":{"Gujarat":98,"Mumbai":52,"Umar Area":26,"Sakib Area":51,"Ahmedabad":2},"city":{"Surat":57,"Rajkot":14,"Valsad":11,"Navsari":1,"Bardoli":3,"Bharuch":0,"Ankleshwar":1,"Vadodara":4}},"2026-08-14":{"total":186,"products":{"Cleris":71,"Cleris UV":4,"C Blue":1,"Night drive C Blue":2,"Tissot":91},"area":{"Gujarat":108,"Mumbai":60,"Umar Area":34,"Sakib Area":50,"Ahmedabad":0},"city":{"Surat":57,"Rajkot":20,"Valsad":14,"Navsari":2,"Bardoli":4,"Bharuch":2,"Ankleshwar":1,"Vadodara":4}},"2026-08-15":{"total":160,"products":{"Cleris":64,"Cleris UV":6,"C Blue":2,"Night drive C Blue":3,"Tissot":78},"area":{"Gujarat":124,"Mumbai":15,"Umar Area":45,"Sakib Area":66,"Ahmedabad":2},"city":{"Surat":84,"Rajkot":11,"Valsad":14,"Navsari":1,"Bardoli":2,"Bharuch":0,"Ankleshwar":2,"Vadodara":1}},"2026-08-16":{"total":5,"products":{"Cleris":0,"Cleris UV":2,"C Blue":0,"Night drive C Blue":0,"Tissot":3},"area":{},"city":{}},"2026-08-17":{"total":304,"products":{"Cleris":104,"Cleris UV":6,"C Blue":9,"Night drive C Blue":10,"Tissot":153},"area":{"Gujarat":181,"Mumbai":68,"Umar Area":65,"Sakib Area":73,"Ahmedabad":4},"city":{"Surat":104,"Rajkot":35,"Valsad":17,"Navsari":4,"Bardoli":3,"Bharuch":0,"Ankleshwar":3,"Vadodara":5}},"2026-08-18":{"total":174,"products":{"Tissot":83,"Cleris":77,"Cleris UV":2,"C Blue":0,"Night drive C Blue":4},"area":{"Gujarat":104.5,"Mumbai":41.5,"Umar Area":37,"Sakib Area":45,"Ahmedabad":3},"city":{"Surat":56,"Mumbai":41,"Rajkot":13,"Valsad":9,"Navsari":2,"Bardoli":8,"Vadodara":6,"Ahmedabad":3,"Ankleshwar":1}}};
+let data=JSON.parse(JSON.stringify(seedData));
+const products=["Tissot","Cleris","Cleris UV","C Blue","Night drive C Blue"];
+const areas=["Gujarat","Mumbai","Umar Area","Sakib Area","Ahmedabad"];
+const cities=["Surat","Rajkot","Valsad","Navsari","Bardoli","Bharuch","Ankleshwar","Vadodara"];
+
+function n(x){return Number(x||0)}
+function fmt(x){x=n(x);return Number.isInteger(x)?String(x):x.toFixed(1)}
+function dateFmt(s){let [y,m,d]=s.split("-");return d+"/"+m+"/"+y}
+function day(s){return new Date(s+"T12:00:00").toLocaleDateString("en-US",{weekday:"long"})}
+function sunday(s){return new Date(s+"T12:00:00").getDay()===0}
+function workingDays(month,end){let [y,m]=month.split("-").map(Number),e=new Date(end+"T12:00:00"),c=0;for(let d=1;d<=e.getDate();d++){let x=new Date(y,m-1,d);if(x.getDay()!==0)c++}return c}
+function monthTotal(month,end){return Object.entries(data).filter(([s])=>s.startsWith(month)&&s<=end&&!sunday(s)).reduce((a,[,v])=>a+n(v.total),0)}
+function avg(s){
+let m=s.slice(0,7);
+let rows=Object.entries(data).filter(([d,v])=>d.startsWith(m)&&d<=s&&!sunday(d)&&n(v.total)>0);
+if(!data[s]){
+  let current=n(document.getElementById("total")?.value);
+  if(current>0) rows.push([s,{total:current}]);
+}
+let days=rows.length;
+let total=rows.reduce((a,[,v])=>a+n(v.total),0);
+return days?total/days:0;
+}
+
+function showPage(id,btn){document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");if(id==="history")renderHistory();if(id==="reports")renderReports();if(id==="dashboard")renderDashboard()}
+function setDate(s){document.getElementById("date").value=s;document.getElementById("day").value=day(s);fillEntry(data[s]||{});generateReport(s)}
+function fillEntry(v){let h="";products.forEach(p=>{h+=`<div class="input-list"><label>${p}</label><input class="p" data-name="${p}" type="number" step="0.5" min="0" value="${v.products?.[p]??""}"></div>`});h+="<h3>Area Wise</h3>";areas.forEach(a=>{h+=`<div class="input-list"><label>${a}</label><input class="a" data-name="${a}" type="number" step="0.5" min="0" value="${v.area?.[a]??""}"></div>`});h+="<h3>City Wise</h3>";cities.forEach(c=>{h+=`<div class="input-list"><label>${c}</label><input class="c" data-name="${c}" type="number" step="0.5" min="0" value="${v.city?.[c]??""}"></div>`});document.getElementById("entryInputs").innerHTML=h}
+function collect(){let p={},a={},c={};document.querySelectorAll(".p").forEach(x=>p[x.dataset.name]=n(x.value));document.querySelectorAll(".a").forEach(x=>a[x.dataset.name]=n(x.value));document.querySelectorAll(".c").forEach(x=>c[x.dataset.name]=n(x.value));return {total:n(document.getElementById("total").value),products:p,area:a,city:c}}
+function updateEntryAverage(){
+let s=document.getElementById("date").value;
+let a=document.getElementById("entryAvg");
+if(!a)return;
+let total=n(document.getElementById("total").value);
+let m=s.slice(0,7);
+let recorded=Object.entries(data).filter(([d,v])=>d.startsWith(m)&&d<=s&&!sunday(d)&&n(v.total)>0);
+if(total>0 && !data[s]) recorded.push([s,{total}]);
+let sum=recorded.reduce((x,[,v])=>x+n(v.total),0);
+a.value=recorded.length?fmt(sum/recorded.length):"0";
+}
+function generateReport(s){let v=data[s]||collect();updateEntryAverage();let t=`📊 *DAILY ORDER REPORT*\n\n🗓️Date : ${dateFmt(s)}\n🗓️ Day : *${day(s)}*\n\n━━━━━━━━━━━━━━━━━━\n💎 *TOTAL SALES*\n• Total Pairs : *${fmt(v.total)}*\n• Daily Average : *${fmt(avg(s))}*\n━━━━━━━━━━━━━━━━━━\n\n📦 *PRODUCT / COATING WISE SALES*`;products.forEach(p=>t+=`\n• ${p.toUpperCase()} : ${fmt(v.products?.[p])}`);t+="\n━━━━━━━━━━━━━━━━━━\n\n🌍 *AREA WISE SALES*";areas.forEach(a=>{if(n(v.area?.[a]))t+=`\n• ${a} : ${fmt(v.area[a])}`});t+="\n━━━━━━━━━━━━━━━━━━\n\n🏙️ *CITY WISE SALES*";cities.forEach(c=>{if(n(v.city?.[c]))t+=`\n• ${c} : ${fmt(v.city[c])}`});t+="\n━━━━━━━━━━━━━━━━━━";document.getElementById("report").textContent=t}
+
+let salesChartInstance=null, productChartInstance=null;
+function renderCharts(){
+  if(typeof Chart==="undefined") return;
+  const entries=Object.entries(data).sort((a,b)=>a[0].localeCompare(b[0]));
+  const labels=entries.map(([s])=>dateFmt(s).slice(0,5));
+  const totals=entries.map(([,v])=>n(v.total));
+  const prodTotals=products.map(p=>entries.reduce((a,[,v])=>a+n(v.products?.[p]),0));
+
+  const sc=document.getElementById("salesChart");
+  const pc=document.getElementById("productChart");
+  if(sc){
+    if(salesChartInstance)salesChartInstance.destroy();
+    salesChartInstance=new Chart(sc,{type:"line",data:{labels,datasets:[{label:"Total Pairs",data:totals,tension:.25,fill:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{y:{beginAtZero:true}}}});
+  }
+  if(pc){
+    if(productChartInstance)productChartInstance.destroy();
+    productChartInstance=new Chart(pc,{type:"bar",data:{labels:products,datasets:[{label:"Pairs",data:prodTotals}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  }
+}
+function renderDashboard(){renderCharts();let entries=Object.entries(data).sort((a,b)=>a[0].localeCompare(b[0])),total=entries.reduce((a,[,v])=>a+n(v.total),0),work=entries.filter(([s])=>!sunday(s)).length,best=entries.reduce((b,x)=>n(x[1].total)>n(b[1].total)?x:b,entries[0]||["",{}]);document.getElementById("dashTotal").textContent=fmt(total);document.getElementById("dashDays").textContent=work;document.getElementById("dashAvg").textContent=fmt(work?total/work:0);document.getElementById("dashBest").textContent=best[0]?dateFmt(best[0])+" • "+fmt(best[1].total):"—";document.getElementById("dashTable").innerHTML=makeTable(entries)}
+function makeTable(entries){
+  if(!entries.length)return'<div class="empty">No data.</div>';
+  return'<div class="tablewrap"><table><thead><tr><th>Date</th><th>Day</th><th>Total</th><th>Tissot</th><th>Cleris</th><th>Cleris UV</th><th>C Blue</th><th>Night Drive</th><th>Gujarat</th><th>Mumbai</th><th>Umar</th><th>Sakib</th><th>Ahmedabad</th><th>Surat</th><th>Rajkot</th><th>Valsad</th><th>Navsari</th><th>Bardoli</th><th>Bharuch</th><th>Ankleshwar</th><th>Vadodara</th><th>Action</th></tr></thead><tbody>'+
+  entries.slice().reverse().map(([s,v])=>{
+    const cloudDate=s>HISTORICAL_MAX;
+    const action=cloudDate
+      ? `<div class="table-actions"><button class="mini-btn edit-btn" onclick="editDate('${s}')">✎ Edit</button><button class="mini-btn delete-btn" onclick="deleteDate('${s}')">✕ Delete</button></div>`
+      : `<span class="muted">Locked</span>`;
+    return`<tr><td>${dateFmt(s)}</td><td>${day(s)}</td><td><b>${fmt(v.total)}</b></td>${products.map(p=>`<td>${fmt(v.products?.[p])}</td>`).join("")}${areas.map(a=>`<td>${fmt(v.area?.[a])}</td>`).join("")}${cities.map(c=>`<td>${fmt(v.city?.[c])}</td>`).join("")}<td>${action}</td></tr>`
+  }).join("")+"</tbody></table></div>"
+}
+function renderHistory(){document.getElementById("historyTable").innerHTML=makeTable(Object.entries(data).sort((a,b)=>a[0].localeCompare(b[0])))}
+function aggregate(from,to){let r={total:0,products:{},area:{},city:{}};Object.entries(data).filter(([s])=>s>=from&&s<=to).forEach(([,v])=>{r.total+=n(v.total);products.forEach(k=>r.products[k]=(r.products[k]||0)+n(v.products?.[k]));areas.forEach(k=>r.area[k]=(r.area[k]||0)+n(v.area?.[k]));cities.forEach(k=>r.city[k]=(r.city[k]||0)+n(v.city?.[k]))});return r}
+function reportBlock(title,from,to){
+let r=aggregate(from,to);
+let days=Object.keys(data).filter(s=>s>=from&&s<=to&&!sunday(s)).length;
+let avg=days?r.total/days:0;
+let t=`📊 *${title}*
+
+🗓️ From : *${dateFmt(from)}*
+🗓️ To   : *${dateFmt(to)}*
+
+━━━━━━━━━━━━━━━━━━
+💎 *TOTAL SALES*
+• Total Pairs       : *${fmt(r.total)}*
+• Working Days      : *${days}*
+• Daily Average     : *${fmt(avg)}*
+━━━━━━━━━━━━━━━━━━
+
+📦 *PRODUCT WISE SALES*
+• TISSOT            : *${fmt(r.products["Tissot"])}*
+• CLERIS            : *${fmt(r.products["Cleris"])}*
+• CLERIS UV         : *${fmt(r.products["Cleris UV"])}*
+• C BLUE            : *${fmt(r.products["C Blue"])}*
+• NIGHT DRIVE C BLUE: *${fmt(r.products["Night drive C Blue"])}*
+━━━━━━━━━━━━━━━━━━
+
+🌍 *AREA WISE SALES*`;
+areas.forEach(k=>{if(n(r.area[k]))t+=`\n• ${k.padEnd(18," ")} : *${fmt(r.area[k])}*`});
+t+=`\n━━━━━━━━━━━━━━━━━━
+
+🏙️ *CITY WISE SALES*`;
+cities.forEach(k=>{if(n(r.city[k]))t+=`\n• ${k.padEnd(18," ")} : *${fmt(r.city[k])}*`});
+t+=`\n━━━━━━━━━━━━━━━━━━`;
+return t;
+}
+
+function renderReports(){let dates=Object.keys(data).sort(),end=dates[dates.length-1]||"2026-08-18",e=new Date(end+"T12:00:00"),d=e.getDay(),m=new Date(e);m.setDate(e.getDate()+(d===0?-6:1-d));let from=m.toISOString().slice(0,10);document.getElementById("weekly").textContent=reportBlock("WEEKLY ORDER REPORT",from,end);document.getElementById("monthly").textContent=reportBlock("MONTHLY ORDER REPORT",end.slice(0,7)+"-01",end)}
+async function loadCloud(){try{const {data:rows,error}=await supabaseClient.from("daily_sales").select("id,sales_date,total_pairs,products,areas,citis").order("sales_date",{ascending:true});if(error)throw error;(rows||[]).forEach(r=>{if(r.sales_date>HISTORICAL_MAX)data[r.sales_date]={total:n(r.total_pairs),products:r.products||{},area:r.areas||{},city:r.citis||{}}});document.getElementById("cloudStatus").textContent="☁️ Supabase Connected";renderDashboard();renderHistory();renderReports()}catch(e){document.getElementById("cloudStatus").textContent="⚠️ Cloud read failed";console.error(e)}}
+async function saveNewDay(){
+  let s=document.getElementById("date").value;
+  if(!s)return alert("Select date.");
+  if(s<=HISTORICAL_MAX)return alert("01–18 August historical data is locked. Enter 19 August onward.");
+  let v=collect();
+  let msg=document.getElementById("entryMsg");
+  let saveBtn=document.getElementById("saveBtn");
+  msg.innerHTML='<div class="status">Saving to Supabase…</div>';
+
+  // Existing cloud date = UPDATE; new date = INSERT.
+  let {data:old,error:qerr}=await supabaseClient.from("daily_sales").select("id").eq("sales_date",s).limit(1);
+  if(qerr){
+    msg.innerHTML='<div class="status err">'+qerr.message+"</div>";
+    return;
+  }
+
+  if(old?.length){
+    const {error}=await supabaseClient.from("daily_sales").update({
+      total_pairs:v.total,products:v.products,areas:v.area,citis:v.city
+    }).eq("sales_date",s);
+    if(error){
+      msg.innerHTML='<div class="status err">Update failed: '+error.message+"</div>";
+      return;
+    }
+    data[s]=v;
+    msg.innerHTML='<div class="status">✓ Daily report updated in Supabase.</div>';
+    saveBtn.textContent="✓ Update Daily Report";
+  }else{
+    let id=Date.now()*1000+Math.floor(Math.random()*1000);
+    const {error}=await supabaseClient.from("daily_sales").insert({
+      id,sales_date:s,total_pairs:v.total,products:v.products,areas:v.area,citis:v.city
+    });
+    if(error){
+      msg.innerHTML='<div class="status err">Save failed: '+error.message+"</div>";
+      return;
+    }
+    data[s]=v;
+    msg.innerHTML='<div class="status">✓ Saved to Supabase successfully.</div>';
+  }
+
+  document.getElementById("editMode").style.display="none";
+  renderDashboard();renderHistory();renderReports();generateReport(s);
+}
+
+function editDate(s){
+  if(s<=HISTORICAL_MAX){
+    alert("01–18 August historical data is locked.");
+    return;
+  }
+  const navEntry=[...document.querySelectorAll(".nav button")].find(b=>b.textContent.trim()==="Daily Entry");
+  showPage("entry",navEntry);
+  document.getElementById("date").value=s;
+  document.getElementById("day").value=day(s);
+  document.getElementById("total").value=data[s]?.total??"";
+  fillEntry(data[s]||{});
+  updateEntryAverage();
+  generateReport(s);
+  const mode=document.getElementById("editMode");
+  mode.style.display="block";
+  mode.textContent="✎ Editing "+dateFmt(s)+" • Make corrections and press Update Daily Report.";
+  document.getElementById("saveBtn").textContent="✓ Update Daily Report";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+async function deleteDate(s){
+  if(s<=HISTORICAL_MAX){
+    alert("01–18 August historical data is locked.");
+    return;
+  }
+  if(!confirm("Delete "+dateFmt(s)+" daily sales record permanently?"))return;
+
+  const msg=document.getElementById("entryMsg");
+  const {error}=await supabaseClient.from("daily_sales").delete().eq("sales_date",s);
+  if(error){
+    alert("Delete failed: "+error.message);
+    return;
+  }
+
+  delete data[s];
+  if(document.getElementById("date").value===s){
+    clearEntry();
+    document.getElementById("saveBtn").textContent="✓ Generate & Save Daily Report";
+    document.getElementById("editMode").style.display="none";
+  }
+  renderDashboard();renderHistory();renderReports();
+  alert("✓ "+dateFmt(s)+" deleted from Supabase.");
+}
+
+function clearEntry(){document.getElementById("total").value="";fillEntry({});document.getElementById("report").textContent="";document.getElementById("entryMsg").innerHTML="";document.getElementById("editMode").style.display="none";document.getElementById("saveBtn").textContent="✓ Generate & Save Daily Report";updateEntryAverage()}
+function copyById(id){navigator.clipboard.writeText(document.getElementById(id).textContent).then(()=>alert("Copied. Ab WhatsApp mein paste karo."))}
+function copyReport(){copyById("report")}function copyWhatsApp(){copyReport();setTimeout(()=>window.open("https://wa.me/","_blank"),250)}
+function downloadExcel(){let rows=Object.entries(data).sort();let out=rows.map(([s,v])=>({Date:s,Day:day(s),Total_Pairs:v.total,...Object.fromEntries(products.map(k=>[k,n(v.products?.[k])])),...Object.fromEntries(areas.map(k=>[k,n(v.area?.[k])])),...Object.fromEntries(cities.map(k=>[k,n(v.city?.[k])]))}));let wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(out),"Daily Data");XLSX.writeFile(wb,"CLERIS_DAILY_SALES.xlsx")}
+document.getElementById("date").addEventListener("change",()=>{let s=document.getElementById("date").value;document.getElementById("day").value=day(s);fillEntry(data[s]||{});document.getElementById("total").value=data[s]?.total??"";updateEntryAverage();generateReport(s);if(s>HISTORICAL_MAX&&data[s]){document.getElementById("editMode").style.display="block";document.getElementById("editMode").textContent="✎ Editing "+dateFmt(s)+" • Make corrections and press Update Daily Report.";document.getElementById("saveBtn").textContent="✓ Update Daily Report"}else{document.getElementById("editMode").style.display="none";document.getElementById("saveBtn").textContent="✓ Generate & Save Daily Report"}});
+document.getElementById("total").addEventListener("input",()=>{let s=document.getElementById("date").value;updateEntryAverage();generateReport(s)});
+document.getElementById("date").value="2026-08-19";document.getElementById("day").value=day("2026-08-19");fillEntry({});updateEntryAverage();document.getElementById("saveBtn").textContent="✓ Generate & Save Daily Report";loadCloud();renderDashboard();renderHistory();renderReports();
+</script>
+</body></html>
